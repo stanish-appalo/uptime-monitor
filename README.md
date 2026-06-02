@@ -1,5 +1,7 @@
 # Uptime Monitor
 
+**🔗 Live demo:** https://uptime-monitor-s5c9.onrender.com
+
 A small SaaS app for keeping an eye on websites. You add the URLs you care about,
 the app checks them on a schedule, and it records when something goes down (and when
 it comes back). Teams can share monitors, and there's a public status page you can
