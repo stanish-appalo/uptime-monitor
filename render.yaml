@@ -5,6 +5,7 @@ services:
     name: uptime-monitor
     runtime: node
     plan: free
+    region: virginia       # same region as the Neon DB (US East) -> low latency
     buildCommand: npm install
     startCommand: npm start
     envVars:
