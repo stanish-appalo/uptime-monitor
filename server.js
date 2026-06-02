@@ -19,6 +19,11 @@ const { startChecker } = require('./src/checker');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// When deployed behind a host like Render, traffic arrives through their HTTPS proxy.
+// This tells Express to trust that proxy so things like secure cookies and req.protocol
+// work correctly. Harmless locally (there's no proxy in front of us there).
+app.set('trust proxy', 1);
+
 // Parse JSON request bodies into req.body.
 app.use(express.json());
 

@@ -51,6 +51,20 @@ The tables are created automatically on first start (see `migrate()` in `src/db.
 
 > Using a cloud database? Set `PGSSL=true` in your `.env` - most of them require SSL.
 
+## Deploying it live
+
+The app is hosted on [Render](https://render.com) with a free [Neon](https://neon.tech)
+Postgres database. There's a `render.yaml` blueprint in the repo, so Render can set the
+service up automatically - the only thing you provide is the `DATABASE_URL` from Neon.
+
+1. Create a Postgres database on Neon and copy its connection string.
+2. On Render: **New + > Blueprint**, pick this repo, and paste the connection string
+   into the `DATABASE_URL` field when prompted. `SESSION_SECRET` is generated for you.
+3. Render runs `npm install` then `npm start`, and the tables are created on first boot.
+
+> The free Render tier sleeps after inactivity, so the first request after idle takes a
+> few seconds to wake up - and the background checker only runs while the service is awake.
+
 ## Roles cheat-sheet
 
 | Role   | Can do                                                        |
