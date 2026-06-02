@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Status</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container narrow" style="padding-top: 48px;">
+    <h1 id="teamName">Status</h1>
+    <div id="banner" class="banner unknown">Loading…</div>
+    <div class="card" style="margin-top: 16px;">
+      <div id="monitorList"><p class="muted">Loading…</p></div>
+    </div>
+    <p class="muted small" id="updated"></p>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    // The team id is the last part of the URL: /status/123
+    const teamId = window.location.pathname.split('/').pop();
+
+    async function load() {
+      try {
+        const data = await api('/api/status/' + teamId);
+        document.getElementById('teamName').textContent = data.team.name + ' status';
+
+        const banner = document.getElementById('banner');
+        banner.className = 'banner ' + data.overall;
+        banner.textContent =
+          data.overall === 'up' ? 'All systems operational'
+          : data.overall === 'down' ? 'Some systems are down'
+          : 'No monitors yet';
+
+        const list = document.getElementById('monitorList');
+        if (data.monitors.length === 0) {
+          list.innerHTML = '<p class="muted">Nothing to show here.</p>';
+        } else {
+          list.innerHTML = data.monitors.map((m) => `
+            <div class="list-row">
+              <div><span class="dot ${m.status}"></span>${esc(m.name)}</div>
+              <div class="meta">${m.uptime == null ? '' : m.uptime + '% uptime'}</div>
+            </div>`).join('');
+        }
+
+        const now = new Date();
+        document.getElementById('updated').textContent = 'Last updated ' + now.toLocaleTimeString();
+      } catch (err) {
+        document.getElementById('banner').textContent = err.message;
+      }
+    }
+
+    load();
+    setInterval(load, 30000); // refresh every 30s
+  </script>
+</body>
+</html>

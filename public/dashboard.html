@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard - Uptime Monitor</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">⬤ Uptime Monitor</div>
+    <div class="right">
+      <a id="statusLink" class="small" href="#" target="_blank">Public status page ↗</a>
+      <span class="badge" id="roleBadge">...</span>
+      <span class="small muted" id="whoami"></span>
+      <button class="secondary small" id="logoutBtn">Log out</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button data-tab="monitors" class="active">Monitors</button>
+      <button data-tab="incidents">Incidents</button>
+      <button data-tab="team">Team</button>
+    </div>
+
+    <!-- MONITORS TAB -->
+    <section id="tab-monitors">
+      <div class="card" id="addMonitorCard">
+        <h3>Add a monitor</h3>
+        <form id="addMonitorForm">
+          <div class="row">
+            <div>
+              <label for="mName">Name</label>
+              <input type="text" id="mName" placeholder="My website" required />
+            </div>
+            <div>
+              <label for="mUrl">URL</label>
+              <input type="url" id="mUrl" placeholder="https://example.com" required />
+            </div>
+            <div style="flex: 0 0 120px;">
+              <label for="mInterval">Every (sec)</label>
+              <input type="number" id="mInterval" value="60" min="15" />
+            </div>
+          </div>
+          <div class="error" id="addError"></div>
+          <button type="submit" style="margin-top: 10px;">Add monitor</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Your monitors</h3>
+        <div id="monitorList"><p class="muted">Loading...</p></div>
+      </div>
+    </section>
+
+    <!-- INCIDENTS TAB -->
+    <section id="tab-incidents" class="hidden">
+      <div class="card">
+        <h3>Incidents</h3>
+        <div id="incidentList"><p class="muted">Loading...</p></div>
+      </div>
+    </section>
+
+    <!-- TEAM TAB -->
+    <section id="tab-team" class="hidden">
+      <div class="card" id="inviteCard">
+        <h3>Invite people</h3>
+        <p class="muted small">Share this code so others can join your team as members.</p>
+        <div id="inviteCodeBox"></div>
+      </div>
+      <div class="card">
+        <h3>Members</h3>
+        <div id="memberList"><p class="muted">Loading...</p></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let me = null; // { user, team, role }
+
+    // Role helpers. These mirror the server's rules so we can hide buttons the user
+    // can't use - but the server still enforces them for real (never trust the client).
+    const RANK = ['viewer', 'member', 'admin', 'owner'];
+    const atLeast = (role) => me && RANK.indexOf(me.role) >= RANK.indexOf(role);
+
+    async function boot() {
+      try {
+        me = await api('/api/me');
+      } catch {
+        // Not logged in - off to the login page.
+        window.location.href = '/login.html';
+        return;
+      }
+
+      document.getElementById('whoami').textContent = `${me.user.name} · ${me.team.name}`;
+      document.getElementById('roleBadge').textContent = me.role;
+      document.getElementById('statusLink').href = `/status/${me.team.id}`;
+
+      // Viewers can't add monitors, so hide the form entirely for them.
+      if (!atLeast('member')) {
+        document.getElementById('addMonitorCard').classList.add('hidden');
+      }
+
+      setupTabs();
+      loadMonitors();
+
+      // Refresh whatever tab is open every 15s so statuses stay live.
+      setInterval(refreshActiveTab, 15000);
+    }
+
+    function setupTabs() {
+      const buttons = document.querySelectorAll('.tabs button');
+      buttons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          buttons.forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          ['monitors', 'incidents', 'team'].forEach((t) => {
+            document.getElementById('tab-' + t).classList.toggle('hidden', t !== btn.dataset.tab);
+          });
+          refreshActiveTab();
+        });
+      });
+    }
+
+    function activeTab() {
+      return document.querySelector('.tabs button.active').dataset.tab;
+    }
+    function refreshActiveTab() {
+      const t = activeTab();
+      if (t === 'monitors') loadMonitors();
+      else if (t === 'incidents') loadIncidents();
+      else if (t === 'team') loadTeam();
+    }
+
+    // ---- Monitors ----
+    async function loadMonitors() {
+      const list = document.getElementById('monitorList');
+      try {
+        const monitors = await api('/api/monitors');
+        if (monitors.length === 0) {
+          list.innerHTML = '<p class="muted">No monitors yet. Add one above.</p>';
+          return;
+        }
+        list.innerHTML = monitors.map(renderMonitorRow).join('');
+        // Wire up delete buttons (only admins+ see them).
+        list.querySelectorAll('[data-delete]').forEach((btn) => {
+          btn.addEventListener('click', () => deleteMonitor(btn.dataset.delete));
+        });
+      } catch (err) {
+        list.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      }
+    }
+
+    function renderMonitorRow(m) {
+      const uptime = m.uptime == null ? '-' : m.uptime + '%';
+      const deleteBtn = atLeast('admin')
+        ? `<button class="danger small" data-delete="${m.id}">Delete</button>`
+        : '';
+      return `
+        <div class="list-row">
+          <div>
+            <div><span class="dot ${m.status}"></span><strong>${esc(m.name)}</strong></div>
+            <div class="meta">${esc(m.url)}</div>
+          </div>
+          <div style="text-align: right;">
+            <div class="meta">uptime ${uptime} · ${formatMs(m.lastResponseTime)}</div>
+            <div class="meta">checked ${formatTime(m.lastCheckedAt)}</div>
+          </div>
+          <div style="flex: 0 0 auto; margin-left: 12px;">${deleteBtn}</div>
+        </div>`;
+    }
+
+    document.getElementById('addMonitorForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('addError');
+      errorEl.textContent = '';
+      try {
+        await api('/api/monitors', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('mName').value,
+            url: document.getElementById('mUrl').value,
+            intervalSeconds: Number(document.getElementById('mInterval').value),
+          }),
+        });
+        e.target.reset();
+        document.getElementById('mInterval').value = 60;
+        loadMonitors();
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+
+    async function deleteMonitor(id) {
+      if (!confirm('Delete this monitor and all its history?')) return;
+      try {
+        await api('/api/monitors/' + id, { method: 'DELETE' });
+        loadMonitors();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // ---- Incidents ----
+    async function loadIncidents() {
+      const list = document.getElementById('incidentList');
+      try {
+        const incidents = await api('/api/incidents');
+        if (incidents.length === 0) {
+          list.innerHTML = '<p class="muted">No incidents recorded. Nice and quiet. 🎉</p>';
+          return;
+        }
+        list.innerHTML = incidents.map(renderIncidentRow).join('');
+        list.querySelectorAll('[data-ack]').forEach((btn) => {
+          btn.addEventListener('click', () => acknowledge(btn.dataset.ack));
+        });
+      } catch (err) {
+        list.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      }
+    }
+
+    function renderIncidentRow(i) {
+      const ongoing = !i.resolved_at;
+      const when = ongoing
+        ? `<span class="badge" style="color: var(--red);">ongoing</span> since ${formatTime(i.started_at)}`
+        : `${formatTime(i.started_at)} → ${formatTime(i.resolved_at)}`;
+      let ackInfo = '';
+      if (i.acknowledged_by) ackInfo = '<span class="meta">· acknowledged</span>';
+      const ackBtn = (ongoing && !i.acknowledged_by && atLeast('member'))
+        ? `<button class="secondary small" data-ack="${i.id}">Acknowledge</button>`
+        : '';
+      return `
+        <div class="list-row">
+          <div>
+            <div><strong>${esc(i.monitor_name)}</strong> ${ackInfo}</div>
+            <div class="meta">${when}</div>
+          </div>
+          <div style="flex: 0 0 auto;">${ackBtn}</div>
+        </div>`;
+    }
+
+    async function acknowledge(id) {
+      try {
+        await api('/api/incidents/' + id + '/acknowledge', { method: 'POST' });
+        loadIncidents();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // ---- Team ----
+    async function loadTeam() {
+      try {
+        const [team, members] = await Promise.all([
+          api('/api/team'),
+          api('/api/team/members'),
+        ]);
+
+        const box = document.getElementById('inviteCodeBox');
+        if (team.inviteCode) {
+          box.innerHTML = `<div class="row tight"><code class="badge" style="font-size:1rem;">${esc(team.inviteCode)}</code></div>`;
+        } else {
+          // Members/viewers don't get the code from the server.
+          box.innerHTML = '<p class="muted small">Only admins can see the invite code.</p>';
+        }
+
+        renderMembers(members);
+      } catch (err) {
+        document.getElementById('memberList').innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      }
+    }
+
+    function renderMembers(members) {
+      const canManage = atLeast('admin');
+      document.getElementById('memberList').innerHTML = members.map((mem) => {
+        const isMe = mem.id === me.user.id;
+        let controls = `<span class="badge">${mem.role}</span>`;
+        if (canManage && !isMe) {
+          const options = RANK.map((r) =>
+            `<option value="${r}" ${r === mem.role ? 'selected' : ''}>${r}</option>`
+          ).join('');
+          controls = `
+            <select data-role-for="${mem.id}" style="width:auto;">${options}</select>
+            <button class="danger small" data-remove="${mem.id}">Remove</button>`;
+        }
+        return `
+          <div class="list-row">
+            <div>
+              <div><strong>${esc(mem.name)}</strong>${isMe ? ' <span class="meta">(you)</span>' : ''}</div>
+              <div class="meta">${esc(mem.email)}</div>
+            </div>
+            <div class="row tight" style="flex:0 0 auto; gap:8px;">${controls}</div>
+          </div>`;
+      }).join('');
+
+      document.querySelectorAll('[data-role-for]').forEach((sel) => {
+        sel.addEventListener('change', () => changeRole(sel.dataset.roleFor, sel.value));
+      });
+      document.querySelectorAll('[data-remove]').forEach((btn) => {
+        btn.addEventListener('click', () => removeMember(btn.dataset.remove));
+      });
+    }
+
+    async function changeRole(userId, role) {
+      try {
+        await api(`/api/team/members/${userId}/role`, {
+          method: 'POST',
+          body: JSON.stringify({ role }),
+        });
+        loadTeam();
+      } catch (err) {
+        alert(err.message);
+        loadTeam();
+      }
+    }
+
+    async function removeMember(userId) {
+      if (!confirm('Remove this person from the team?')) return;
+      try {
+        await api('/api/team/members/' + userId, { method: 'DELETE' });
+        loadTeam();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await api('/api/logout', { method: 'POST' });
+      window.location.href = '/login.html';
+    });
+
+    boot();
+  </script>
+</body>
+</html>

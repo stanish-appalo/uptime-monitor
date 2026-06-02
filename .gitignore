@@ -1,0 +1,8 @@
+node_modules/
+*.log
+
+# secrets / local config - never commit this
+.env
+
+# my own private notes / study doc - keep this off github
+NOTES_FOR_ME.md

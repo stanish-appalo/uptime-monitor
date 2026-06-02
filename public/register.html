@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign up - Uptime Monitor</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container narrow" style="padding-top: 48px;">
+    <h1>Create your account</h1>
+    <p class="muted">Start your own team, or join one with an invite code.</p>
+
+    <div class="card">
+      <form id="registerForm">
+        <label for="name">Your name</label>
+        <input type="text" id="name" required />
+
+        <label for="email">Email</label>
+        <input type="email" id="email" required />
+
+        <label for="password">Password</label>
+        <input type="password" id="password" required minlength="6" />
+
+        <!-- Toggle between starting a team and joining one. -->
+        <div class="tabs" style="margin-top: 16px;">
+          <button type="button" id="tabCreate" class="active">Create a team</button>
+          <button type="button" id="tabJoin">Join with code</button>
+        </div>
+
+        <div id="createBlock">
+          <label for="teamName">Team name</label>
+          <input type="text" id="teamName" placeholder="e.g. Acme Inc" />
+        </div>
+
+        <div id="joinBlock" class="hidden">
+          <label for="inviteCode">Invite code</label>
+          <input type="text" id="inviteCode" placeholder="e.g. A7F3K9" />
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <button type="submit" style="width: 100%; margin-top: 12px;">Sign up</button>
+      </form>
+    </div>
+
+    <p class="muted small">Already have an account? <a href="/login.html">Log in</a></p>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const errorEl = document.getElementById('error');
+    const tabCreate = document.getElementById('tabCreate');
+    const tabJoin = document.getElementById('tabJoin');
+    const createBlock = document.getElementById('createBlock');
+    const joinBlock = document.getElementById('joinBlock');
+
+    // "mode" decides which field we send. Default is creating a new team.
+    let mode = 'create';
+
+    tabCreate.addEventListener('click', () => {
+      mode = 'create';
+      tabCreate.classList.add('active');
+      tabJoin.classList.remove('active');
+      createBlock.classList.remove('hidden');
+      joinBlock.classList.add('hidden');
+    });
+    tabJoin.addEventListener('click', () => {
+      mode = 'join';
+      tabJoin.classList.add('active');
+      tabCreate.classList.remove('active');
+      joinBlock.classList.remove('hidden');
+      createBlock.classList.add('hidden');
+    });
+
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.textContent = '';
+
+      const body = {
+        name: document.getElementById('name').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+      };
+      if (mode === 'create') {
+        body.teamName = document.getElementById('teamName').value;
+      } else {
+        body.inviteCode = document.getElementById('inviteCode').value;
+      }
+
+      try {
+        await api('/api/register', { method: 'POST', body: JSON.stringify(body) });
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>
